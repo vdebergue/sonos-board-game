@@ -2,6 +2,6 @@ package domain
 
 sealed trait GameFinishStatus
 case object GameFinishStatus {
-  case object Won extends GameFinishStatus
+  case class Won(by: Player) extends GameFinishStatus
   case object Draw extends GameFinishStatus
 }

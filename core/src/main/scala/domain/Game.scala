@@ -2,15 +2,67 @@ package domain
 
 import java.util.UUID
 
-import eventsourcing.{Entity, Event, State}
+import domain.GameEvent.{GameHosted, GameJoined, GameStarted, PlayerMoved}
+import domain.GameState.{GameAvailable, GameInProgress}
+import eventsourcing.StateStore.StateStore
+import eventsourcing.{Entity, Event, State, StateStore}
+import zio.{IO, UIO, ZIO}
 
-class GameEntity extends Entity[GameEvents, GameState] {
-  import GameEvents._
+object GameCommands {
+  type CommandError = String
+  type CommandResult = ZIO[StateStore[GameState], CommandError, Seq[GameEvent]]
+
+  def hostGame(player: Player, kind: GameKind): UIO[GameEvent] = {
+    UIO(GameHosted(UUID.randomUUID(), kind, player))
+  }
+
+  def joinGame(id: UUID, player: Player): CommandResult = withGame[GameAvailable](id) { game =>
+    if (game.players.contains(player)) {
+      ZIO.fail("Player is already in the game")
+    } else if (game.players.size >= game.kind.numPlayers.`end`) {
+      ZIO.fail("Game is already full")
+    } else {
+      UIO(Seq(GameJoined(id, player)))
+    }
+  }
+
+  def startGame(id: UUID, player: Player): CommandResult = withGame[GameAvailable](id) { game =>
+    if (player != game.host) ZIO.fail(s"Only game host can start a game")
+    else if (!game.kind.numPlayers.contains(game.players.size)) {
+      ZIO.fail(s"Wrong number of players, this game requires ${game.kind.numPlayers}")
+    } else {
+      UIO(Seq(GameStarted(id)))
+    }
+  }
+
+  def sendMove(id: UUID, player: Player, move: Move): CommandResult = withGame[GameInProgress](id) { game =>
+    if (game.kind.isMoveValid(move, game.board)) {
+      val newBoard = game.kind.updateBoard(move, game.board)
+      val finishedEvent: Seq[GameEvent] = newBoard.isFinished().map(status => GameEvent.GameEnded(id, status)).toSeq
+      UIO(Seq(PlayerMoved(id, player, move)) ++ finishedEvent)
+    } else {
+      ZIO.fail("Invalid move")
+    }
+  }
+
+  private def withGame[S <: GameState: Manifest](
+      id: UUID
+  )(f: S => IO[CommandError, Seq[GameEvent]]): CommandResult = {
+    StateStore.get[GameState](id).mapError(error => s"Store Error: $error").flatMap {
+      case None       => ZIO.fail(s"Game not found")
+      case Some(g: S) => f(g)
+      case g          => ZIO.fail(s"Invalid game state: ${g}")
+    }
+  }
+}
+
+class GameEntity extends Entity[GameEvent, GameState] {
+  import GameEvent._
   import GameState._
 
   // todo make an event ?
-  def impossibleState = throw new IllegalStateException("")
-  override def foldEvent(state: GameState, event: GameEvents): GameState = event match {
+  def impossibleState = throw new IllegalStateException("State is not possible")
+  override def foldEvent(state: GameState, event: GameEvent): GameState = event match {
     case GameHosted(id, kind, host) => GameAvailable(id, kind, host, players = Set(host))
     case GameJoined(id, player) =>
       state match {
@@ -27,9 +79,9 @@ class GameEntity extends Entity[GameEvents, GameState] {
         case game: GameInProgress => game.copy(board = game.kind.updateBoard(move, game.board))
         case _                    => impossibleState
       }
-    case GameEnded(id, status, winner) =>
+    case GameEnded(id, status) =>
       state match {
-        case game: GameInProgress => GameFinished(id, game.kind, game.host, game.players, status, winner)
+        case game: GameInProgress => GameFinished(id, game.kind, game.host, game.players, status)
         case _                    => impossibleState
       }
   }
@@ -37,13 +89,13 @@ class GameEntity extends Entity[GameEvents, GameState] {
   override def zeroState: GameState = GameNotStarted
 }
 
-sealed trait GameEvents extends Event
-case object GameEvents {
-  case class GameHosted(entityId: UUID, kind: GameKind, host: Player) extends GameEvents
-  case class GameJoined(entityId: UUID, player: Player) extends GameEvents
-  case class GameStarted(entityId: UUID) extends GameEvents
-  case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvents
-  case class GameEnded(entityId: UUID, status: GameFinishStatus, winner: Option[Player]) extends GameEvents
+sealed trait GameEvent extends Event
+case object GameEvent {
+  case class GameHosted(entityId: UUID, kind: GameKind, host: Player) extends GameEvent
+  case class GameJoined(entityId: UUID, player: Player) extends GameEvent
+  case class GameStarted(entityId: UUID) extends GameEvent
+  case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvent
+  case class GameEnded(entityId: UUID, status: GameFinishStatus) extends GameEvent
 }
 
 sealed trait GameState extends State
@@ -73,7 +125,6 @@ case object GameState {
       kind: GameKind,
       host: Player,
       players: Set[Player],
-      status: GameFinishStatus,
-      winner: Option[Player]
+      status: GameFinishStatus
   ) extends GameState
 }
