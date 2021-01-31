@@ -2,8 +2,9 @@ package eventsourcing
 
 import java.util.UUID
 
+import eventsourcing.StateEngine.StateEngineError
 import izumi.reflect.Tag
-import zio.{Has, IO, ZIO}
+import zio.{Has, IO, Task, ZIO}
 
 trait Entity[E <: Event, S <: State] {
   def zeroState: S
@@ -46,11 +47,31 @@ object StateStore {
   def save[S <: State: Tag](state: S): ZIO[StateStore[S], StoreError, Unit] = ZIO.accessM(_.get.save(state))
 }
 
+object StateEngine {
+  type StateEngineError = String
+}
 class StateEngine[E <: Event, S <: State: Tag](entity: Entity[E, S]) {
   def processEvent(event: E): ZIO[StateStore.StateStore[S], StateStore.StoreError, S] = for {
     storeState <- StateStore.get(event.entityId)
     currentState = storeState.getOrElse(entity.zeroState)
-    updatedState = entity.foldEvent(currentState, event)
+    updatedState <- Task {
+      entity.foldEvent(currentState, event)
+    }.mapError(error => s"Error when applying event: $error")
     _ <- StateStore.save(updatedState)
   } yield updatedState
+
+  def processEvents(events: Seq[E]): ZIO[StateStore.StateStore[S], StateEngineError, S] = {
+    if (events.isEmpty) ZIO.fail("Cannot run with empty events list")
+    else if (!events.forall(_.entityId == events.head.entityId)) ZIO.fail("Events should be for the same entity")
+    else {
+      for {
+        storeState <- StateStore.get(events.head.entityId)
+        currentState = storeState.getOrElse(entity.zeroState)
+        updatedState <- Task {
+          events.foldLeft(currentState)((state, event) => entity.foldEvent(state, event))
+        }.mapError(error => s"Error when applying events: $error")
+        _ <- StateStore.save(updatedState)
+      } yield updatedState
+    }
+  }
 }

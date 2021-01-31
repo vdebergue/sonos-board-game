@@ -56,7 +56,7 @@ object GameCommands {
   }
 }
 
-class GameEntity extends Entity[GameEvent, GameState] {
+object GameEntity extends Entity[GameEvent, GameState] {
   import GameEvent._
   import GameState._
 
