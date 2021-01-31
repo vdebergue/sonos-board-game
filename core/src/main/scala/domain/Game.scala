@@ -12,8 +12,8 @@ object GameCommands {
   type CommandError = String
   type CommandResult = ZIO[StateStore[GameState], CommandError, Seq[GameEvent]]
 
-  def hostGame(player: Player, kind: GameKind): UIO[GameEvent] = {
-    UIO(GameHosted(UUID.randomUUID(), kind, player))
+  def hostGame(id: UUID, player: Player, kind: GameKind): CommandResult = {
+    UIO(Seq(GameHosted(id, kind, player)))
   }
 
   def joinGame(id: UUID, player: Player): CommandResult = withGame[GameAvailable](id) { game =>

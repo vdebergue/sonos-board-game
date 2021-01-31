@@ -34,8 +34,8 @@ object Journal {
     ZIO.accessM(_.get.listEvents(entityId))
 }
 
-trait StoreError
 object StateStore {
+  type StoreError = String
   type StateStore[S <: State] = Has[Service[S]]
   trait Service[S <: State] {
     def get(id: Entity.Id): IO[StoreError, Option[S]]
@@ -47,7 +47,7 @@ object StateStore {
 }
 
 class StateEngine[E <: Event, S <: State: Tag](entity: Entity[E, S]) {
-  def processEvent(event: E): ZIO[StateStore.StateStore[S], StoreError, S] = for {
+  def processEvent(event: E): ZIO[StateStore.StateStore[S], StateStore.StoreError, S] = for {
     storeState <- StateStore.get(event.entityId)
     currentState = storeState.getOrElse(entity.zeroState)
     updatedState = entity.foldEvent(currentState, event)
