@@ -14,30 +14,21 @@ object GameCommandsTest extends DefaultRunnableSpec {
 
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] = suite("GameCommands")(
     testM("should be able to hostGame") {
-      val app = for {
-        events <- GameCommands.hostGame(id, player1, gameKind)
-      } yield assert(events)(Assertion.equalTo(Seq(GameHosted(id, gameKind, player1))))
-      val store = new GameStoreForTest()
-
-      app.provideLayer(makeLayer(store))
+      val command = GameCommands.HostGame(id, player1, gameKind)
+      val result = GameCommands.handler(command, GameState.GameNotStarted)
+      assertM(result)(Assertion.equalTo(Seq(GameHosted(id, gameKind, player1))))
     },
     testM("should be able to join game") {
-      val store = new GameStoreForTest()
-      store.data = Map(id -> GameState.GameAvailable(id, gameKind, player1, Set(player1)))
-      val app = for {
-        events <- GameCommands.joinGame(id, player2)
-      } yield assert(events)(Assertion.equalTo(Seq(GameJoined(id, player2))))
-      app.provideLayer(makeLayer(store))
+      val command = GameCommands.JoinGame(id, player2)
+      val state = GameState.GameAvailable(id, gameKind, player1, Set(player1))
+      val result = GameCommands.handler(command, state)
+      assertM(result)(Assertion.equalTo(Seq(GameJoined(id, player2))))
     },
     testM("should not be able to join a full game") {
-      val store = new GameStoreForTest()
-      store.data = Map(id -> GameState.GameAvailable(id, gameKind, player1, Set(player1, player2)))
-
-      val app = for {
-        error <- GameCommands.joinGame(id, Player("j3")).flip
-      } yield assert(error)(Assertion.containsString("Game is already full"))
-
-      app.provideLayer(makeLayer(store))
+      val command = GameCommands.JoinGame(id, Player("j3"))
+      val state = GameState.GameAvailable(id, gameKind, player1, Set(player1, player2))
+      val result = GameCommands.handler(command, state)
+      assertM(result.flip)(Assertion.containsString("Game is already full"))
     }
   )
 }

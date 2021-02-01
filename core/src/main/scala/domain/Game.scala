@@ -3,56 +3,100 @@ package domain
 import java.util.UUID
 
 import domain.GameEvent.{GameHosted, GameJoined, GameStarted, PlayerMoved}
-import domain.GameState.{GameAvailable, GameInProgress}
-import eventsourcing.StateStore.StateStore
-import eventsourcing.{Entity, Event, State, StateStore}
-import zio.{IO, UIO, ZIO}
+import eventsourcing.{Entity, Event, State}
+import zio.{UIO, ZIO}
+
+sealed trait GameState extends State
+case object GameState {
+  case object GameNotStarted extends GameState {
+    // this is the zero state and is not stored in db, so entityId is not important here
+    val entityId = UUID.fromString("00000000-0000-0000-0000-000000000000")
+  }
+
+  case class GameAvailable(
+      entityId: UUID,
+      kind: GameKind,
+      host: Player,
+      players: Set[Player]
+  ) extends GameState
+
+  case class GameInProgress(
+      entityId: UUID,
+      kind: GameKind,
+      host: Player,
+      players: Set[Player],
+      board: Board
+  ) extends GameState
+
+  case class GameFinished(
+      entityId: UUID,
+      kind: GameKind,
+      host: Player,
+      players: Set[Player],
+      status: GameFinishStatus
+  ) extends GameState
+}
+
+sealed trait GameCommand {
+  def entityId: Entity.Id
+}
 
 object GameCommands {
+
   type CommandError = String
-  type CommandResult = ZIO[StateStore[GameState], CommandError, Seq[GameEvent]]
+  type CommandResult = ZIO[Any, CommandError, Seq[GameEvent]]
 
-  def hostGame(id: UUID, player: Player, kind: GameKind): CommandResult = {
-    UIO(Seq(GameHosted(id, kind, player)))
-  }
+  case class HostGame(entityId: Entity.Id, player: Player, kind: GameKind) extends GameCommand
+  case class JoinGame(entityId: Entity.Id, player: Player) extends GameCommand
+  case class StartGame(entityId: Entity.Id, player: Player) extends GameCommand
+  case class SendMove(entityId: Entity.Id, player: Player, move: Move) extends GameCommand
 
-  def joinGame(id: UUID, player: Player): CommandResult = withGame[GameAvailable](id) { game =>
-    if (game.players.contains(player)) {
-      ZIO.fail("Player is already in the game")
-    } else if (game.players.size >= game.kind.numPlayers.`end`) {
-      ZIO.fail("Game is already full")
-    } else {
-      UIO(Seq(GameJoined(id, player)))
-    }
-  }
+  private val commandNotHandled = ZIO.fail("command not supported with current state")
+  import GameState._
+  def handler(command: GameCommand, state: GameState): CommandResult = {
+    state match {
+      case GameNotStarted =>
+        command match {
+          case HostGame(id, player, kind) => UIO(Seq(GameHosted(id, kind, player)))
+          case _                          => commandNotHandled
+        }
 
-  def startGame(id: UUID, player: Player): CommandResult = withGame[GameAvailable](id) { game =>
-    if (player != game.host) ZIO.fail(s"Only game host can start a game")
-    else if (!game.kind.numPlayers.contains(game.players.size)) {
-      ZIO.fail(s"Wrong number of players, this game requires ${game.kind.numPlayers}")
-    } else {
-      UIO(Seq(GameStarted(id)))
-    }
-  }
+      case game: GameAvailable =>
+        command match {
+          case JoinGame(_, player) =>
+            if (game.players.contains(player)) {
+              ZIO.fail("Player is already in the game")
+            } else if (game.players.size >= game.kind.numPlayers.`end`) {
+              ZIO.fail("Game is already full")
+            } else {
+              UIO(Seq(GameJoined(game.entityId, player)))
+            }
+          case StartGame(_, player) =>
+            if (player != game.host) ZIO.fail(s"Only game host can start a game")
+            else if (!game.kind.numPlayers.contains(game.players.size)) {
+              ZIO.fail(s"Wrong number of players, this game requires ${game.kind.numPlayers}")
+            } else {
+              UIO(Seq(GameStarted(game.entityId)))
+            }
+          case _ => commandNotHandled
+        }
 
-  def sendMove(id: UUID, player: Player, move: Move): CommandResult = withGame[GameInProgress](id) { game =>
-    val board = game.board
-    if (board.isMoveValid(player, move)) {
-      val newBoard = board.updateBoard(player, move)
-      val finishedEvent: Seq[GameEvent] = newBoard.isFinished().map(status => GameEvent.GameEnded(id, status)).toSeq
-      UIO(Seq(PlayerMoved(id, player, move)) ++ finishedEvent)
-    } else {
-      ZIO.fail("Invalid move")
-    }
-  }
+      case game: GameInProgress =>
+        command match {
+          case SendMove(_, player, move) =>
+            val board = game.board
+            if (board.isMoveValid(player, move)) {
+              val newBoard = board.updateBoard(player, move)
+              val finishedEvent: Seq[GameEvent] =
+                newBoard.isFinished().map(status => GameEvent.GameEnded(game.entityId, status)).toSeq
+              UIO(Seq(PlayerMoved(game.entityId, player, move)) ++ finishedEvent)
+            } else {
+              ZIO.fail("Invalid move")
+            }
+          case _ => commandNotHandled
 
-  private def withGame[S <: GameState: Manifest](
-      id: UUID
-  )(f: S => IO[CommandError, Seq[GameEvent]]): CommandResult = {
-    StateStore.get[GameState](id).mapError(error => s"Store Error: $error").flatMap {
-      case None       => ZIO.fail(s"Game not found")
-      case Some(g: S) => f(g)
-      case g          => ZIO.fail(s"Invalid game state: ${g}")
+        }
+      case _: GameFinished => commandNotHandled
     }
   }
 }
@@ -97,35 +141,4 @@ case object GameEvent {
   case class GameStarted(entityId: UUID) extends GameEvent
   case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvent
   case class GameEnded(entityId: UUID, status: GameFinishStatus) extends GameEvent
-}
-
-sealed trait GameState extends State
-case object GameState {
-  case object GameNotStarted extends GameState {
-    // this is the zero state and is not stored in db, so entityId is not important here
-    val entityId = UUID.fromString("00000000-0000-0000-0000-000000000000")
-  }
-
-  case class GameAvailable(
-      entityId: UUID,
-      kind: GameKind,
-      host: Player,
-      players: Set[Player]
-  ) extends GameState
-
-  case class GameInProgress(
-      entityId: UUID,
-      kind: GameKind,
-      host: Player,
-      players: Set[Player],
-      board: Board
-  ) extends GameState
-
-  case class GameFinished(
-      entityId: UUID,
-      kind: GameKind,
-      host: Player,
-      players: Set[Player],
-      status: GameFinishStatus
-  ) extends GameState
 }
