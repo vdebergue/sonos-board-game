@@ -36,8 +36,9 @@ object GameCommands {
   }
 
   def sendMove(id: UUID, player: Player, move: Move): CommandResult = withGame[GameInProgress](id) { game =>
-    if (game.kind.isMoveValid(move, game.board)) {
-      val newBoard = game.kind.updateBoard(move, game.board)
+    val board = game.board
+    if (board.isMoveValid(player, move)) {
+      val newBoard = board.updateBoard(player, move)
       val finishedEvent: Seq[GameEvent] = newBoard.isFinished().map(status => GameEvent.GameEnded(id, status)).toSeq
       UIO(Seq(PlayerMoved(id, player, move)) ++ finishedEvent)
     } else {
@@ -76,7 +77,7 @@ object GameEntity extends Entity[GameEvent, GameState] {
       }
     case PlayerMoved(id, player, move) =>
       state match {
-        case game: GameInProgress => game.copy(board = game.kind.updateBoard(move, game.board))
+        case game: GameInProgress => game.copy(board = game.board.updateBoard(player, move))
         case _                    => impossibleState
       }
     case GameEnded(id, status) =>
