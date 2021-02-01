@@ -3,7 +3,7 @@ package domain
 import java.util.UUID
 
 import domain.GameEvent.{GameHosted, GameJoined, GameStarted, PlayerMoved}
-import eventsourcing.{Entity, Event, State}
+import eventsourcing.{Command, CommandEngine, Entity, Event, State}
 import zio.{UIO, ZIO}
 
 sealed trait GameState extends State
@@ -37,10 +37,18 @@ case object GameState {
   ) extends GameState
 }
 
-sealed trait GameCommand {
-  def entityId: Entity.Id
+sealed trait GameEvent extends Event
+case object GameEvent {
+  case class GameHosted(entityId: UUID, kind: GameKind, host: Player) extends GameEvent
+  case class GameJoined(entityId: UUID, player: Player) extends GameEvent
+  case class GameStarted(entityId: UUID) extends GameEvent
+  case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvent
+  case class GameEnded(entityId: UUID, status: GameFinishStatus) extends GameEvent
 }
 
+sealed trait GameCommand extends Command {
+  def entityId: Entity.Id
+}
 object GameCommands {
 
   type CommandError = String
@@ -101,7 +109,7 @@ object GameCommands {
   }
 }
 
-object GameEntity extends Entity[GameEvent, GameState] {
+object GameEntity extends Entity[GameEvent, GameState, GameCommand] {
   import GameEvent._
   import GameState._
 
@@ -132,13 +140,9 @@ object GameEntity extends Entity[GameEvent, GameState] {
   }
 
   override def zeroState: GameState = GameNotStarted
-}
 
-sealed trait GameEvent extends Event
-case object GameEvent {
-  case class GameHosted(entityId: UUID, kind: GameKind, host: Player) extends GameEvent
-  case class GameJoined(entityId: UUID, player: Player) extends GameEvent
-  case class GameStarted(entityId: UUID) extends GameEvent
-  case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvent
-  case class GameEnded(entityId: UUID, status: GameFinishStatus) extends GameEvent
+  override def commandHandler(
+      command: GameCommand,
+      state: GameState
+  ): ZIO[Any, CommandEngine.CommandError, Seq[GameEvent]] = GameCommands.handler(command, state)
 }

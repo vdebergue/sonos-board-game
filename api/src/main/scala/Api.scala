@@ -1,15 +1,18 @@
 import caliban.GraphQL.graphQL
-import caliban.RootResolver
-import domain.GameState
+import caliban.schema.Schema
+import caliban.{GraphQL, RootResolver}
+import zio.RIO
 
 object Api {
+  import GraphQLSchema._
 
-  def getAvailableGames(): List[GameState.GameAvailable] = Nil
+  val queries = Queries[Resolvers.Env](availableGames = RIO.succeed(Nil), allGames = RIO.succeed(Nil))
 
-  case class Queries(availableGames: List[GameState.GameAvailable])
+  // hack around derivation that does not work with ZIO of type Resolvers.Env
+  implicit val querySchema =
+    (Schema.gen[Queries[Any]]).asInstanceOf[Schema[Resolvers.Env, Queries[Resolvers.Env]]]
+  implicit val mutationSchema =
+    (Schema.gen[Mutations[Any]]).asInstanceOf[Schema[Resolvers.Env, Mutations[Resolvers.Env]]]
 
-  val queries = Queries(getAvailableGames())
-  val api = graphQL(RootResolver(queries))
-
-  val interpreter = api.interpreter
+  val api: GraphQL[Resolvers.Env] = graphQL(RootResolver(queries, Resolvers.mutations))
 }

@@ -1,3 +1,3 @@
 package domain
 
-case class Move()
+case class Move(to: String)
