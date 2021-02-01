@@ -3,6 +3,7 @@ name := "sonos-board-game"
 ThisBuild / scalaVersion := "2.13.4"
 
 val zioVersion = "1.0.4"
+val calibanVersion = "0.9.4"
 
 lazy val core = (project in file("core"))
   .settings(
@@ -14,3 +15,13 @@ lazy val core = (project in file("core"))
     ),
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
   )
+
+lazy val api = (project in file("api"))
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.github.ghostdogpr" %% "caliban" % calibanVersion,
+      "com.github.ghostdogpr" %% "caliban-http4s" % calibanVersion,
+      "ch.qos.logback" % "logback-classic" % "1.2.3"
+    )
+  )
+  .dependsOn(core)

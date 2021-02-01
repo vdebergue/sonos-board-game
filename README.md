@@ -2,3 +2,12 @@
 
 ## How to run
 
+
+```graphql
+{
+  availableGames {
+  	entityId,
+    host { name }
+  } 
+}
+```
