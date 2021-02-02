@@ -63,3 +63,27 @@ mutation StartGame($id: ID!, $player: PlayerInput!) {
 
 {"id": "b9f8c3e0-1e80-46ee-9c22-da2e013b077b", "player": {"name": "foo"} }
 ```
+
+- Play some moves
+```
+mutation SendMove($id: ID!, $player: PlayerInput!, $move: MoveInput!) {
+  sendMove(entityId: $id, player: $player, move: $move) {
+    __typename,
+    ... on GameInProgress {
+      board,
+    }
+    ... on GameFinished {
+      status {
+        __typename
+        ... on Won {
+          by { name}
+        }
+      }
+    }
+  }
+}
+
+{"id": "b9f8c3e0-1e80-46ee-9c22-da2e013b077b", "player": {"name": "foo"}, "move": {"value": "e2e4"} }
+
+{"id": "b9f8c3e0-1e80-46ee-9c22-da2e013b077b", "player": {"name": "bar"}, "move": {"value": "e7e5"} }
+```

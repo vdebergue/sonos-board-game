@@ -5,6 +5,8 @@ ThisBuild / scalaVersion := "2.13.4"
 val zioVersion = "1.0.4"
 val calibanVersion = "0.9.4"
 
+val scalaChess = RootProject(uri("https://github.com/ornicar/scalachess.git"))
+
 lazy val core = (project in file("core"))
   .settings(
     libraryDependencies ++= Seq(
@@ -15,6 +17,7 @@ lazy val core = (project in file("core"))
     ),
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
   )
+  .dependsOn(scalaChess)
 
 lazy val api = (project in file("api"))
   .settings(
@@ -24,4 +27,4 @@ lazy val api = (project in file("api"))
       "ch.qos.logback" % "logback-classic" % "1.2.3"
     )
   )
-  .dependsOn(core)
+  .dependsOn(core, scalaChess)

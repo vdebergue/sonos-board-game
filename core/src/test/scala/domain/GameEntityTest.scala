@@ -22,8 +22,8 @@ object GameEntityTest extends DefaultRunnableSpec {
         GameHosted(id, gameKind, player1),
         GameJoined(id, player2),
         GameStarted(id),
-        PlayerMoved(id, player1, Move()),
-        PlayerMoved(id, player2, Move()),
+        PlayerMoved(id, player1, Move("e2e3")),
+        PlayerMoved(id, player2, Move("a7a5")),
         GameEnded(id, GameFinishStatus.Won(by = player1))
       )
       val finalState = gameEngine.processEvents(events)
@@ -38,7 +38,7 @@ object GameEntityTest extends DefaultRunnableSpec {
     testM("should fail when invalid events are provided") {
       val events = Seq(
         GameHosted(id, gameKind, player1),
-        PlayerMoved(id, player1, Move())
+        PlayerMoved(id, player1, Move("e2e3"))
       )
       val error = gameEngine.processEvents(events).flip
       val store = new GameStoreForTest()

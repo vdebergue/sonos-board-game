@@ -1,5 +1,6 @@
 import caliban.GraphQL.graphQL
 import caliban.schema.Schema
+import caliban.wrappers.Wrappers
 import caliban.{GraphQL, RootResolver}
 import zio.RIO
 
@@ -14,5 +15,6 @@ object Api {
   implicit val mutationSchema =
     (Schema.gen[Mutations[Any]]).asInstanceOf[Schema[Resolvers.Env, Mutations[Resolvers.Env]]]
 
-  val api: GraphQL[Resolvers.Env] = graphQL(RootResolver(queries, Resolvers.mutations))
+  val api: GraphQL[Resolvers.Env with zio.console.Console] =
+    graphQL(RootResolver(queries, Resolvers.mutations)) @@ Wrappers.printErrors
 }

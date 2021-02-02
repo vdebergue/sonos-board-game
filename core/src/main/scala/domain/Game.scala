@@ -2,6 +2,7 @@ package domain
 
 import java.util.UUID
 
+import cats.data.Validated
 import domain.GameEvent.{GameHosted, GameJoined, GameStarted, PlayerMoved}
 import eventsourcing.{Command, CommandEngine, Entity, Event, State}
 import zio.{UIO, ZIO}
@@ -93,13 +94,13 @@ object GameCommands {
         command match {
           case SendMove(_, player, move) =>
             val board = game.board
-            if (board.isMoveValid(player, move)) {
-              val newBoard = board.updateBoard(player, move)
-              val finishedEvent: Seq[GameEvent] =
-                newBoard.isFinished().map(status => GameEvent.GameEnded(game.entityId, status)).toSeq
-              UIO(Seq(PlayerMoved(game.entityId, player, move)) ++ finishedEvent)
-            } else {
-              ZIO.fail("Invalid move")
+            board.checkMove(player, move) match {
+              case Validated.Valid(_) =>
+                val newBoard = board.updateBoard(player, move)
+                val finishedEvent: Seq[GameEvent] =
+                  newBoard.isFinished().map(status => GameEvent.GameEnded(game.entityId, status)).toSeq
+                UIO(Seq(PlayerMoved(game.entityId, player, move)) ++ finishedEvent)
+              case Validated.Invalid(error) => ZIO.fail(error)
             }
           case _ => commandNotHandled
 
@@ -124,7 +125,7 @@ object GameEntity extends Entity[GameEvent, GameState, GameCommand] {
       }
     case GameStarted(id) =>
       state match {
-        case GameAvailable(id, kind, host, players) => GameInProgress(id, kind, host, players, kind.initBoard)
+        case GameAvailable(id, kind, host, players) => GameInProgress(id, kind, host, players, kind.initBoard(players))
         case _                                      => impossibleState
       }
     case PlayerMoved(id, player, move) =>
