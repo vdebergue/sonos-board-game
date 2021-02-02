@@ -8,7 +8,8 @@ object Resolvers {
 
   val engine = new CommandEngine(GameEntity)
   // Using exception here because caliban handles natively errors of type Throwable
-  def errorToThrowable(msg: String): Throwable = new RuntimeException(msg)
+  case class ResolverError(message: String) extends Throwable
+  def errorToThrowable(msg: String): Throwable = ResolverError(msg)
   val mutations: Mutations[Env] = Mutations(
     hostGame = (cmd) => engine.handleCommand(cmd).mapError(errorToThrowable),
     joinGame = (cmd) => engine.handleCommand(cmd).mapError(errorToThrowable),

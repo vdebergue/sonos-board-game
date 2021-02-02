@@ -2,6 +2,17 @@
 
 ## How to run
 
+Launch sbt and run the api project:
+```
+sbt
+> api/run
+
+# you can run some tests from the core module
+> core/test 
+```
+
+The web api will start on port 8080
+
 ## Query examples
 
 Go to [graphiql](http://localhost:8080) page

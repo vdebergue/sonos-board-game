@@ -1,4 +1,4 @@
-import caliban.Http4sAdapter
+import caliban.{CalibanError, GraphQLInterpreter, Http4sAdapter}
 import cats.data.Kleisli
 import cats.effect.Blocker
 import org.http4s.StaticFile
@@ -36,8 +36,8 @@ object Main extends App {
                   StaticFile
                     .fromResource[F]("graphiql.html", blocker) //(taskEffectInstance, zioContextShift)
                 ),
-                "/api/graphql" -> CORS(Http4sAdapter.makeHttpService(interpreter)),
-                "/ws/graphql" -> CORS(Http4sAdapter.makeWebSocketService(interpreter))
+                "/api/graphql" -> CORS(Http4sAdapter.makeHttpService(withErrorReturn(interpreter))),
+                "/ws/graphql" -> CORS(Http4sAdapter.makeWebSocketService(withErrorReturn(interpreter)))
               ).orNotFound
             )
             .resource
@@ -48,5 +48,24 @@ object Main extends App {
       }
       .provideCustomLayer(customLayer)
       .exitCode
+  }
+
+  def withErrorReturn[R](
+      interpreter: GraphQLInterpreter[R, CalibanError]
+  ): GraphQLInterpreter[R, CalibanError] = {
+    import caliban.ResponseValue.ObjectValue
+    import caliban.CalibanError.{ExecutionError, ValidationError, ParsingError}
+    import caliban.Value.StringValue
+
+    interpreter.mapError {
+      case err @ ExecutionError(_, _, _, Some(exampleError: Resolvers.ResolverError), _) =>
+        err.copy(extensions = Some(ObjectValue(List(("details", StringValue(exampleError.message))))))
+      case err: ExecutionError =>
+        err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("EXECUTION_ERROR"))))))
+      case err: ValidationError =>
+        err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("VALIDATION_ERROR"))))))
+      case err: ParsingError =>
+        err.copy(extensions = Some(ObjectValue(List(("errorCode", StringValue("PARSING_ERROR"))))))
+    }
   }
 }
