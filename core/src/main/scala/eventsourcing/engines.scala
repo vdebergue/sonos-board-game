@@ -46,5 +46,6 @@ class CommandEngine[C <: Command, E <: Event: Tag, S <: State: Tag](
     events <- entity.commandHandler(command, currentState)
     _ <- Journal.saveEvents(events)
     newState = events.foldLeft(currentState)((state, event) => entity.foldEvent(state, event))
+    _ <- StateStore.save(newState)
   } yield newState
 }
