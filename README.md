@@ -75,7 +75,7 @@ mutation StartGame($id: ID!, $player: PlayerInput!) {
 {"id": "b9f8c3e0-1e80-46ee-9c22-da2e013b077b", "player": {"name": "foo"} }
 ```
 
-- Play some moves
+- Play some moves, moves should be in uci notation
 ```
 mutation SendMove($id: ID!, $player: PlayerInput!, $move: MoveInput!) {
   sendMove(entityId: $id, player: $player, move: $move) {
