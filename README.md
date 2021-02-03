@@ -2,7 +2,12 @@
 
 ## How to run
 
-Launch sbt and run the api project:
+Start docker compose
+```
+docker-compose up
+```
+
+In an other terminal, launch sbt and run the api project:
 ```
 sbt
 > api/run
@@ -23,6 +28,28 @@ Go to [graphiql](http://localhost:8080) page
   availableGames {
   	entityId,
     host { name }
+  } 
+}
+```
+
+- List all games
+```
+{
+  allGames {
+    __typename,
+  	... on GameInProgress {
+      entityId,
+      players { name }
+      board
+    },
+    ... on GameAvailable {
+      entityId,
+      players { name }
+    },
+    ... on GameFinished {
+      entityId,
+  		players { name }
+    }
   } 
 }
 ```

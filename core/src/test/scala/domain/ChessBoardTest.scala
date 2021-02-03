@@ -37,8 +37,8 @@ object ChessBoardTest extends DefaultRunnableSpec {
 
       val matedBoard =
         chess.Game(None, Some(chess.format.FEN("2bqk2r/r2p1Q1p/p2P4/1p2p3/1P3p2/1BN2P2/PP2KP1P/R6R b k - 0 18")))
-      val board2 = ChessBoard(matedBoard, Map(p1 -> chess.Color.Black, p2 -> chess.Color.White))
-      assert(board2.isFinished())(Assertion.equalTo(Some(GameFinishStatus.Won(p2))))
+      val board2 = ChessBoard(matedBoard, Map(chess.Color.Black -> p1, chess.Color.White -> p2))
+      assert(board2.isFinished())(Assertion.equalTo(Some(Won(p2))))
     }
   )
 }

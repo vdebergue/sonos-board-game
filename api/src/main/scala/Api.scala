@@ -7,8 +7,6 @@ import zio.RIO
 object Api {
   import GraphQLSchema._
 
-  val queries = Queries[Resolvers.Env](availableGames = RIO.succeed(Nil), allGames = RIO.succeed(Nil))
-
   // hack around derivation that does not work with ZIO of type Resolvers.Env
   implicit val querySchema =
     (Schema.gen[Queries[Any]]).asInstanceOf[Schema[Resolvers.Env, Queries[Resolvers.Env]]]
@@ -16,5 +14,5 @@ object Api {
     (Schema.gen[Mutations[Any]]).asInstanceOf[Schema[Resolvers.Env, Mutations[Resolvers.Env]]]
 
   val api: GraphQL[Resolvers.Env with zio.console.Console] =
-    graphQL(RootResolver(queries, Resolvers.mutations)) @@ Wrappers.printErrors
+    graphQL(RootResolver(Resolvers.queries, Resolvers.mutations)) @@ Wrappers.printErrors
 }

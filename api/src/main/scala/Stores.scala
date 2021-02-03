@@ -1,11 +1,11 @@
 import java.util.UUID
 
-import domain.{GameEvent, GameState}
+import domain.{GameAvailable, GameEvent, GameState}
 import eventsourcing.Entity.Id
-import eventsourcing.Journal
 import eventsourcing.Journal.JournalError
-import eventsourcing.StateStore
+import eventsourcing.{Journal, StateStore}
 import eventsourcing.StateStore.StoreError
+import persistence.GameStateQuery
 import zio.{Has, IO, ULayer, ZLayer}
 
 import scala.collection.mutable
@@ -28,14 +28,23 @@ object Stores {
     }
   }
 
+  private val data = mutable.HashMap.empty[UUID, GameState]
   val inMemoryStore: ULayer[Has[StateStore.Service[GameState]]] = ZLayer.succeed {
     new StateStore.Service[GameState] {
-      private val data = mutable.HashMap.empty[UUID, GameState]
       override def get(id: Id): IO[StoreError, Option[GameState]] = IO.succeed(data.get(id))
 
       override def save(state: GameState): IO[StoreError, Unit] = IO.succeed(data.update(state.entityId, state))
     }
+  }
 
+  val inMemoryQuery = ZLayer.succeed {
+    new GameStateQuery.Service {
+      override def listAllGames(): IO[StoreError, Seq[GameState]] = IO.succeed(data.values.toVector)
+
+      override def listAvailableGames(): IO[StoreError, Seq[GameAvailable]] = IO.succeed(data.values.collect {
+        case g: GameAvailable => g
+      }.toVector)
+    }
   }
 
 }

@@ -4,6 +4,26 @@ import eventsourcing.StateEngine.StateEngineError
 import izumi.reflect.Tag
 import zio.{Task, ZIO}
 
+object CommandEngine {
+  type CommandError = String
+}
+class CommandEngine[C <: Command, E <: Event: Tag, S <: State: Tag](
+    entity: Entity[E, S, C]
+) {
+  import CommandEngine.CommandError
+  def handleCommand(command: C): ZIO[StateStore.StateStore[S] with Journal.Journal[E], CommandError, S] = for {
+    storeState <- StateStore.get(command.entityId)
+    currentState = storeState.getOrElse(entity.zeroState)
+    events <- entity.commandHandler(command, currentState)
+    _ <- Journal.saveEvents(events)
+    newState = events.foldLeft(currentState)((state, event) => entity.foldEvent(state, event))
+    _ <- StateStore.save(newState)
+  } yield newState
+}
+
+/** This class is not used, I first wrote it thinking I would use the events more.
+  * This could be useful when reading events from a message queue and rebuilding the state from there
+  */
 object StateEngine {
   type StateEngineError = String
 }
@@ -31,21 +51,4 @@ class StateEngine[E <: Event, S <: State: Tag](entity: Entity[E, S, _]) {
       } yield updatedState
     }
   }
-}
-
-object CommandEngine {
-  type CommandError = String
-}
-class CommandEngine[C <: Command, E <: Event: Tag, S <: State: Tag](
-    entity: Entity[E, S, C]
-) {
-  import CommandEngine.CommandError
-  def handleCommand(command: C): ZIO[StateStore.StateStore[S] with Journal.Journal[E], CommandError, S] = for {
-    storeState <- StateStore.get(command.entityId)
-    currentState = storeState.getOrElse(entity.zeroState)
-    events <- entity.commandHandler(command, currentState)
-    _ <- Journal.saveEvents(events)
-    newState = events.foldLeft(currentState)((state, event) => entity.foldEvent(state, event))
-    _ <- StateStore.save(newState)
-  } yield newState
 }

@@ -7,6 +7,7 @@ import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.middleware.CORS
+import persistence.{GameEventMongoJournal, GameStateMongoStore, Mongo}
 import zio.blocking.Blocking
 import zio.console.putStrLn
 import zio.interop.catz._
@@ -17,7 +18,12 @@ object Main extends App {
   type Env = Resolvers.Env with ZEnv
   type F[A] = RIO[Env, A]
 
-  val customLayer: ZLayer[Any, Throwable, Resolvers.Env] = Stores.inMemoryJournal ++ Stores.inMemoryStore
+  val customLayerInMemory: ZLayer[Any, Throwable, Resolvers.Env] =
+    Stores.inMemoryJournal ++ Stores.inMemoryStore ++ Stores.inMemoryQuery
+
+  val customLayerMongo: ZLayer[Any, Throwable, Resolvers.Env] = {
+    Mongo.layer >>> (GameStateMongoStore.store ++ GameEventMongoJournal.journal ++ GameStateMongoStore.query)
+  }
 
   // TODO: make it compatible with sbt run
   override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
@@ -46,7 +52,9 @@ object Main extends App {
             .foldCauseM(err => putStrLn(err.prettyPrint).as(ExitCode.failure), _ => ZIO.succeed(ExitCode.success))
         } yield ()
       }
-      .provideCustomLayer(customLayer)
+      // To change to in memory storage
+      // .provideCustomLayer(customLayerInMemory)
+      .provideCustomLayer(customLayerMongo)
       .exitCode
   }
 

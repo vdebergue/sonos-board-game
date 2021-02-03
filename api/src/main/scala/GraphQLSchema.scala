@@ -1,13 +1,13 @@
 import caliban.schema.Schema
-import domain.{Board, GameCommands, GameState}
+import domain.{Board, GameAvailable, GameCommands, GameState}
 import zio.RIO
 
 object GraphQLSchema {
   implicit val boardSchema = Schema.stringSchema.contramap[Board](_.repr)
 
   case class Queries[E](
-      availableGames: RIO[E, List[GameState.GameAvailable]],
-      allGames: RIO[E, List[GameState]]
+      availableGames: RIO[E, Seq[GameAvailable]],
+      allGames: RIO[E, Seq[GameState]]
   )
   case class Mutations[E](
       hostGame: GameCommands.HostGame => RIO[E, GameState],

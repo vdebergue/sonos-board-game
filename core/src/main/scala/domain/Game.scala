@@ -3,49 +3,45 @@ package domain
 import java.util.UUID
 
 import cats.data.Validated
-import domain.GameEvent.{GameHosted, GameJoined, GameStarted, PlayerMoved}
 import eventsourcing.{Command, CommandEngine, Entity, Event, State}
 import zio.{UIO, ZIO}
 
 sealed trait GameState extends State
-case object GameState {
-  case object GameNotStarted extends GameState {
-    // this is the zero state and is not stored in db, so entityId is not important here
-    val entityId = UUID.fromString("00000000-0000-0000-0000-000000000000")
-  }
-
-  case class GameAvailable(
-      entityId: UUID,
-      kind: GameKind,
-      host: Player,
-      players: Set[Player]
-  ) extends GameState
-
-  case class GameInProgress(
-      entityId: UUID,
-      kind: GameKind,
-      host: Player,
-      players: Set[Player],
-      board: Board
-  ) extends GameState
-
-  case class GameFinished(
-      entityId: UUID,
-      kind: GameKind,
-      host: Player,
-      players: Set[Player],
-      status: GameFinishStatus
-  ) extends GameState
+case object GameNotStarted extends GameState {
+  // this is the zero state and is not stored in db, so entityId is not important here
+  val entityId = UUID.fromString("00000000-0000-0000-0000-000000000000")
 }
+
+case class GameAvailable(
+    entityId: UUID,
+    kind: GameKind,
+    host: Player,
+    players: Set[Player]
+) extends GameState
+
+case class GameInProgress(
+    entityId: UUID,
+    kind: GameKind,
+    host: Player,
+    players: Set[Player],
+    board: Board
+) extends GameState
+
+case class GameFinished(
+    entityId: UUID,
+    kind: GameKind,
+    host: Player,
+    players: Set[Player],
+    status: GameFinishStatus
+) extends GameState
 
 sealed trait GameEvent extends Event
-case object GameEvent {
-  case class GameHosted(entityId: UUID, kind: GameKind, host: Player) extends GameEvent
-  case class GameJoined(entityId: UUID, player: Player) extends GameEvent
-  case class GameStarted(entityId: UUID) extends GameEvent
-  case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvent
-  case class GameEnded(entityId: UUID, status: GameFinishStatus) extends GameEvent
-}
+// sub-classes are not in an object GameEvent because of issue https://github.com/ReactiveMongo/ReactiveMongo-BSON/issues/66
+case class GameHosted(entityId: UUID, kind: GameKind, host: Player) extends GameEvent
+case class GameJoined(entityId: UUID, player: Player) extends GameEvent
+case class GameStarted(entityId: UUID) extends GameEvent
+case class PlayerMoved(entityId: UUID, player: Player, move: Move) extends GameEvent
+case class GameEnded(entityId: UUID, status: GameFinishStatus) extends GameEvent
 
 sealed trait GameCommand extends Command {
   def entityId: Entity.Id
@@ -61,7 +57,6 @@ object GameCommands {
   case class SendMove(entityId: Entity.Id, player: Player, move: Move) extends GameCommand
 
   private val commandNotHandled = ZIO.fail("command not supported with current state")
-  import GameState._
   def handler(command: GameCommand, state: GameState): CommandResult = {
     state match {
       case GameNotStarted =>
@@ -98,7 +93,7 @@ object GameCommands {
               case Validated.Valid(_) =>
                 val newBoard = board.updateBoard(player, move)
                 val finishedEvent: Seq[GameEvent] =
-                  newBoard.isFinished().map(status => GameEvent.GameEnded(game.entityId, status)).toSeq
+                  newBoard.isFinished().map(status => GameEnded(game.entityId, status)).toSeq
                 UIO(Seq(PlayerMoved(game.entityId, player, move)) ++ finishedEvent)
               case Validated.Invalid(error) => ZIO.fail(error)
             }
@@ -111,10 +106,7 @@ object GameCommands {
 }
 
 object GameEntity extends Entity[GameEvent, GameState, GameCommand] {
-  import GameEvent._
-  import GameState._
 
-  // todo make an event ?
   def impossibleState = throw new IllegalStateException("State is not possible")
   override def foldEvent(state: GameState, event: GameEvent): GameState = event match {
     case GameHosted(id, kind, host) => GameAvailable(id, kind, host, players = Set(host))
