@@ -1,5 +1,7 @@
 # Sonos Board Game
 
+Coding challenge for Sonos team
+
 ## How to run
 
 Start docker compose
